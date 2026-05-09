@@ -1,0 +1,234 @@
+{
+  "name": "Create an n8n SMS gateway webhook with RCSZilla",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## n8n SMS gateway\n\nThis workflow turns n8n into a simple SMS gateway API endpoint powered by RCSZilla.\n\nSend a POST request to the webhook with a recipient phone number, SMS body, and consent flag. The workflow validates the payload, queues the message in RCSZilla, and returns a JSON response.",
+        "height": 280,
+        "width": 500,
+        "color": 4
+      },
+      "id": "7c6cfbb9-ef41-4480-a202-e89e5deef444",
+      "name": "Workflow overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -820,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Setup Guide\n\n1. Install community node: n8n-nodes-rcszilla.\n2. Create an RCSZilla API credential in n8n.\n3. Activate the workflow.\n4. Copy the production webhook URL.\n5. Send POST requests with JSON:\n\n{\n  \"to\": \"+40700000000\",\n  \"message\": \"Your appointment is tomorrow at 10:00.\",\n  \"consent\": true\n}\n\nOptional fields: channel, scheduledAt, source, referenceId.",
+        "height": 440,
+        "width": 560,
+        "color": 5
+      },
+      "id": "df9e0b87-b56d-444f-aab8-a4f503c1810",
+      "name": "Setup guide",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -820,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Request Contract\n\nRequired JSON fields:\n\n- to: recipient phone number with country code\n- message: SMS text\n- consent: true\n\nOptional fields:\n\n- channel: sms or whatsapp. Defaults to sms.\n- scheduledAt: ISO date/time or n8n-supported date value.\n- source: calling app name.\n- referenceId: CRM/order/ticket ID for traceability.\n\nThe workflow rejects missing phone, empty message, unsupported channels, or requests without consent.",
+        "height": 420,
+        "width": 560,
+        "color": 6
+      },
+      "id": "aa1182a6-11d4-4a6e-9c6e-64240a22c5e",
+      "name": "Request contract",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -820,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Compliance Notes\n\nUse this as a transactional or consent-based messaging endpoint.\n\nDo not expose the webhook publicly without authentication controls. For production, add an API key check before the validation node or place the webhook behind a trusted internal service.\n\nDo not use this workflow for unsolicited messaging.",
+        "height": 300,
+        "width": 500,
+        "color": 3
+      },
+      "id": "d4dff462-b3df-4b5f-b039-43d6a5d4ac2",
+      "name": "Compliance notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -160,
+        -280
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "rcszilla-sms-gateway",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "93176b66-c88f-432a-9547-e0a49daa6f8",
+      "name": "SMS gateway webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        180
+      ],
+      "webhookId": "rcszilla-sms-gateway"
+    },
+    {
+      "parameters": {
+        "jsCode": "function present(value) {\n  return value !== undefined && value !== null && String(value).trim() !== '';\n}\n\nfunction cleanPhone(value) {\n  if (!present(value)) return '';\n  const text = String(value).trim();\n  if (text.startsWith('+')) return '+' + text.slice(1).replace(/\\D/g, '');\n  return text.replace(/[^\\d+]/g, '');\n}\n\nfunction bool(value) {\n  return value === true || ['true', 'yes', '1', 'subscribed', 'ok'].includes(String(value ?? '').trim().toLowerCase());\n}\n\nfunction formatScheduledAt(value) {\n  if (!present(value)) return '';\n  const date = new Date(value);\n  if (Number.isNaN(date.getTime())) return String(value);\n  const pad = (part) => String(part).padStart(2, '0');\n  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;\n}\n\nconst payload = $json.body ?? $json;\nconst to = cleanPhone(payload.to ?? payload.phone ?? payload.recipient);\nconst message = String(payload.message ?? payload.text ?? payload.body ?? '').trim();\nconst channel = String(payload.channel ?? 'sms').trim().toLowerCase();\nconst scheduledAt = formatScheduledAt(payload.scheduledAt ?? payload.scheduled_at ?? '');\nconst consent = bool(payload.consent ?? payload.smsConsent ?? payload.optIn ?? payload.opt_in);\nconst allowedChannels = ['sms', 'whatsapp'];\nconst errors = [];\n\nif (!to) errors.push('to is required');\nif (!message) errors.push('message is required');\nif (!consent) errors.push('consent must be true');\nif (!allowedChannels.includes(channel)) errors.push('channel must be sms or whatsapp');\nif (message.length > 1000) errors.push('message is too long');\n\nreturn [{\n  json: {\n    valid: errors.length === 0,\n    errors,\n    to,\n    message,\n    channel,\n    scheduledAt,\n    source: payload.source ?? '',\n    referenceId: payload.referenceId ?? payload.reference_id ?? '',\n  },\n}];"
+      },
+      "id": "907b7972-7b1f-4582-b8b7-f75efb1c5a9",
+      "name": "Validate request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.valid}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "0195698a-c497-491e-aa1d-b872e97a1645",
+      "name": "Request valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        520,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "queueMessage",
+        "to": "={{$json.to}}",
+        "message": "={{$json.message}}",
+        "channel": "={{$json.channel}}",
+        "scheduledAt": "={{$json.scheduledAt}}"
+      },
+      "id": "54c85170-b7c5-4b6d-a936-831a1b43758",
+      "name": "Queue message with RCSZilla",
+      "type": "n8n-nodes-rcszilla.rcsZilla",
+      "typeVersion": 1,
+      "position": [
+        820,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, status: 'queued', rcszilla: $json, referenceId: $('Validate request').item.json.referenceId } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "20d05d4a-e0ab-48b6-a5a9-ecc8164f365",
+      "name": "Respond queued",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1120,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, status: 'rejected', errors: $json.errors } }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "d32be812-52a2-49e5-a715-4cce43c1a4",
+      "name": "Respond rejected",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        820,
+        300
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "SMS gateway webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate request": {
+      "main": [
+        [
+          {
+            "node": "Request valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request valid?": {
+      "main": [
+        [
+          {
+            "node": "Queue message with RCSZilla",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Queue message with RCSZilla": {
+      "main": [
+        [
+          {
+            "node": "Respond queued",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "087454f6-b6b6-493b-93be-479282a0ce92",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "rcszilla-sms-gateway-webhook-n8n",
+  "tags": []
+}

@@ -1,0 +1,185 @@
+{
+    "name":  "WooCommerce new order SMS alert via RCSZilla",
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "content":  "## Description\n\nGet an instant SMS on your phone every time a new WooCommerce order is placed. This is the simplest possible SMS workflow for WooCommerce store owners who are new to n8n.\n\nNo customer phone required. No complex data extraction. Just three nodes: a WooCommerce trigger, a message builder, and RCSZilla to queue the SMS.\n\n## Setup Guide\n\n1. Install the RCSZilla community node package: n8n-nodes-rcszilla.\n2. Create an RCSZilla API credential in n8n.\n3. Create a WooCommerce credential in n8n:\n   - Store URL: your WooCommerce store URL\n   - Consumer Key: WooCommerce > Settings > Advanced > REST API\n   - Consumer Secret: WooCommerce > Settings > Advanced > REST API\n4. Assign the WooCommerce credential to the WooCommerce New Order trigger node.\n5. In the Build Alert Message node, replace +1234567890 with your own mobile number including country code.\n6. Activate the workflow. n8n registers the webhook in WooCommerce automatically.\n7. Place a test order in your store and wait for the SMS.\n\n## Compliance Notes\n\nThis workflow sends SMS to the store owner only. No customer phone numbers are used. No opt-in or consent handling is needed for internal alert messages.",
+                                         "height":  1100,
+                                         "width":  540,
+                                         "color":  4
+                                     },
+                      "id":  "c0000001-0000-0000-0000-000000000001",
+                      "name":  "Sticky Note",
+                      "type":  "n8n-nodes-base.stickyNote",
+                      "position":  [
+                                       0,
+                                       0
+                                   ],
+                      "typeVersion":  1
+                  },
+                  {
+                      "parameters":  {
+                                         "content":  "## Beginner Checklist\n\nThree things to do before activating:\n\n1. Assign your WooCommerce credential to the trigger node.\n2. Replace +1234567890 in the Build Alert Message node with your real mobile number.\n3. Assign your RCSZilla credential to the RCSZilla node.\n\nThat is all. No code changes needed.",
+                                         "height":  200,
+                                         "width":  740,
+                                         "color":  3
+                                     },
+                      "id":  "c0000002-0000-0000-0000-000000000002",
+                      "name":  "Sticky Note1",
+                      "type":  "n8n-nodes-base.stickyNote",
+                      "position":  [
+                                       608,
+                                       80
+                                   ],
+                      "typeVersion":  1
+                  },
+                  {
+                      "parameters":  {
+                                         "content":  "## Step 1 — Trigger\n\nFires every time a new order is created in WooCommerce.\n\nAssign your WooCommerce credential here. n8n registers the webhook in your store automatically when you activate the workflow.",
+                                         "height":  400,
+                                         "width":  300
+                                     },
+                      "id":  "c0000003-0000-0000-0000-000000000003",
+                      "name":  "Sticky Note2",
+                      "type":  "n8n-nodes-base.stickyNote",
+                      "position":  [
+                                       560,
+                                       560
+                                   ],
+                      "typeVersion":  1
+                  },
+                  {
+                      "parameters":  {
+                                         "content":  "## Step 2 — Build Alert Message\n\nBuilds the SMS text from the order data and sets the recipient to your phone number.\n\nReplace +1234567890 with your own mobile number. Include the country code, for example +44 for UK or +1 for US.",
+                                         "height":  400,
+                                         "width":  340
+                                     },
+                      "id":  "c0000004-0000-0000-0000-000000000004",
+                      "name":  "Sticky Note3",
+                      "type":  "n8n-nodes-base.stickyNote",
+                      "position":  [
+                                       860,
+                                       560
+                                   ],
+                      "typeVersion":  1
+                  },
+                  {
+                      "parameters":  {
+                                         "content":  "## Step 3 — Send via RCSZilla\n\nQueues the SMS through RCSZilla on the sms channel.\n\nAssign your RCSZilla API credential here. The recipient phone and message are passed in from Step 2.",
+                                         "height":  400,
+                                         "width":  300,
+                                         "color":  5
+                                     },
+                      "id":  "c0000005-0000-0000-0000-000000000005",
+                      "name":  "Sticky Note4",
+                      "type":  "n8n-nodes-base.stickyNote",
+                      "position":  [
+                                       1200,
+                                       560
+                                   ],
+                      "typeVersion":  1
+                  },
+                  {
+                      "parameters":  {
+                                         "event":  "order.created"
+                                     },
+                      "id":  "d1000001-0000-0000-0000-000000000001",
+                      "name":  "WooCommerce New Order",
+                      "type":  "n8n-nodes-base.wooCommerceTrigger",
+                      "position":  [
+                                       608,
+                                       340
+                                   ],
+                      "typeVersion":  1,
+                      "webhookId":  "woo-rcszilla-new-order-alert-webhook"
+                  },
+                  {
+                      "parameters":  {
+                                         "assignments":  {
+                                                             "assignments":  [
+                                                                                 {
+                                                                                     "id":  "aaa00001-0000-0000-0000-000000000001",
+                                                                                     "name":  "recipientPhone",
+                                                                                     "value":  "+1234567890",
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "aaa00002-0000-0000-0000-000000000002",
+                                                                                     "name":  "smsMessage",
+                                                                                     "value":  "={{ 'New order #' + $json.id + ' from ' + ($json.billing.first_name ?? '') + ' ' + ($json.billing.last_name ?? '') + '. Total: ' + ($json.total ?? '0') + ' ' + ($json.currency ?? '') + '. Items: ' + ($json.line_items ?? []).map(function(i){ return i.name; }).join(', ') + '.' }}",
+                                                                                     "type":  "string"
+                                                                                 }
+                                                                             ]
+                                                         },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "d2000001-0000-0000-0000-000000000001",
+                      "name":  "Build Alert Message",
+                      "type":  "n8n-nodes-base.set",
+                      "position":  [
+                                       880,
+                                       340
+                                   ],
+                      "typeVersion":  3.4
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "queueMessage",
+                                         "to":  "={{ $json.recipientPhone }}",
+                                         "message":  "={{ $json.smsMessage }}",
+                                         "channel":  "sms",
+                                         "scheduledAt":  ""
+                                     },
+                      "type":  "n8n-nodes-rcszilla.rcsZilla",
+                      "typeVersion":  1,
+                      "position":  [
+                                       1160,
+                                       340
+                                   ],
+                      "id":  "d3000001-0000-0000-0000-000000000001",
+                      "name":  "RCSZilla"
+                  }
+              ],
+    "pinData":  {
+
+                },
+    "connections":  {
+                        "WooCommerce New Order":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "Build Alert Message",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ]
+                                                               ]
+                                                  },
+                        "Build Alert Message":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "RCSZilla",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                }
+                    },
+    "active":  false,
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "availableInMCP":  false
+                 },
+    "versionId":  "woocommerce-new-order-sms-alert-v1-2026050901",
+    "meta":  {
+                 "templateCredsSetupCompleted":  false
+             },
+    "id":  "woocommerce-new-order-sms-alert-rcszilla",
+    "tags":  [
+
+             ]
+}

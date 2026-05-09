@@ -1,0 +1,583 @@
+﻿{
+    "name":  "Recover Shopify abandoned carts with AI SMS via RCSZilla",
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "model":  {
+                                                       "__rl":  true,
+                                                       "mode":  "list",
+                                                       "value":  "gpt-4o-mini"
+                                                   },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "0b156bce-50ec-4e56-9c67-be4b34791b3e",
+                      "name":  "SMS Writer Model",
+                      "type":  "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+                      "position":  [
+                                       3936,
+                                       656
+                                   ],
+                      "typeVersion":  1.2
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "append",
+                                         "documentId":  {
+                                                            "__rl":  true,
+                                                            "mode":  "id",
+                                                            "value":  "PASTE_GOOGLE_SHEET_ID"
+                                                        },
+                                         "sheetName":  {
+                                                           "__rl":  true,
+                                                           "mode":  "name",
+                                                           "value":  "Sheet1"
+                                                       },
+                                         "columns":  {
+                                                         "value":  {
+                                                                       "customer":  "={{ $(\u0027Prepare SMS Recovery Data\u0027).item.json.customerName }}",
+                                                                       "phone":  "={{ $(\u0027Prepare SMS Recovery Data\u0027).item.json.phone }}",
+                                                                       "checkout_url":  "={{ $(\u0027Prepare SMS Recovery Data\u0027).item.json.checkoutUrl }}",
+                                                                       "sms_message":  "={{ $(\u0027Generate Recovery SMS\u0027).item.json.output }}",
+                                                                       "rcszilla_response":  "={{ JSON.stringify($json) }}"
+                                                                   },
+                                                         "schema":  [
+                                                                        {
+                                                                            "id":  "customer",
+                                                                            "type":  "string",
+                                                                            "display":  true,
+                                                                            "required":  false,
+                                                                            "displayName":  "customer",
+                                                                            "defaultMatch":  false,
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "phone",
+                                                                            "type":  "string",
+                                                                            "display":  true,
+                                                                            "required":  false,
+                                                                            "displayName":  "phone",
+                                                                            "defaultMatch":  false,
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "checkout_url",
+                                                                            "type":  "string",
+                                                                            "display":  true,
+                                                                            "required":  false,
+                                                                            "displayName":  "checkout_url",
+                                                                            "defaultMatch":  false,
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "sms_message",
+                                                                            "type":  "string",
+                                                                            "display":  true,
+                                                                            "required":  false,
+                                                                            "displayName":  "sms_message",
+                                                                            "defaultMatch":  false,
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "rcszilla_response",
+                                                                            "type":  "string",
+                                                                            "display":  true,
+                                                                            "required":  false,
+                                                                            "displayName":  "rcszilla_response",
+                                                                            "defaultMatch":  false,
+                                                                            "canBeUsedToMatch":  true
+                                                                        }
+                                                                    ],
+                                                         "mappingMode":  "defineBelow",
+                                                         "matchingColumns":  [
+
+                                                                             ],
+                                                         "attemptToConvertTypes":  false,
+                                                         "convertFieldsToString":  false
+                                                     },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "49b21bce-bece-40a3-b9c0-86e4adc3e167",
+                      "name":  "Log SMS Activity",
+                      "type":  "n8n-nodes-base.googleSheets",
+                      "position":  [
+                                       4640,
+                                       448
+                                   ],
+                      "typeVersion":  4.5
+                  },
+                  {
+                      "parameters":  {
+                                         "content":  "## 3. Confirm Recovery Eligibility\n\nThe first IF node confirms that the checkout still appears after the wait period.\n\nThe Prepare SMS Recovery Data node extracts the customer name, phone number, checkout recovery URL, cart value, and SMS marketing consent state.\n\nThe second IF node only allows the SMS path when a phone number, recovery URL, and positive SMS consent are present.",
+                                         "height":  520,
+                                         "width":  420,
+                                         "color":  3
+                                     },
+                      "id":  "b5a6e9ac-6d54-4d6f-bf4d-ced260eecd00",
+                      "name":  "Sticky Note1",
+                      "type":  "n8n-nodes-base.stickyNote",
+                      "position":  [
+                                       3216,
+                                       352
+                                   ],
+                      "typeVersion":  1
+                  },
+                  {
+                      "parameters":  {
+                                         "content":  "## 4. Generate And Send SMS\n\nThe AI Agent writes a short abandoned checkout recovery SMS using the prepared Shopify data.\n\nRCSZilla queues the SMS through the Queue Message operation on the sms channel.\n\nThe message keeps a required opt-out line: Reply STOP to opt out. Keep this line when customizing the SMS copy.",
+                                         "height":  840,
+                                         "width":  920,
+                                         "color":  5
+                                     },
+                      "id":  "5462049f-2c8d-4f94-9475-33b16cbf4074",
+                      "name":  "Sticky Note2",
+                      "type":  "n8n-nodes-base.stickyNote",
+                      "position":  [
+                                       3888,
+                                       -64
+                                   ],
+                      "typeVersion":  1
+                  },
+                  {
+                      "parameters":  {
+                                         "content":  "## Template Notes\n\nThis workflow is designed for consent-based abandoned checkout recovery by SMS.\n\nBefore publishing or using in production:\n\n- Replace placeholder Shopify store URL values.\n- Configure HTTP Header Auth for Shopify instead of hardcoding API keys.\n- Configure RCSZilla, OpenAI, and Google Sheets credentials in n8n.\n- Confirm your SMS consent and opt-out process matches the laws that apply to your store and customers.\n- Test with one internal checkout before activating a production schedule.",
+                                         "height":  320,
+                                         "width":  1300,
+                                         "color":  4
+                                     },
+                      "id":  "ef86a495-60f4-49c0-a5ca-bbc4b36724b8",
+                      "name":  "Sticky Note9",
+                      "type":  "n8n-nodes-base.stickyNote",
+                      "position":  [
+                                       368,
+                                       240
+                                   ],
+                      "typeVersion":  1
+                  },
+                  {
+                      "parameters":  {
+                                         "content":  "## Description\n\nRecover abandoned Shopify checkouts with AI-written SMS messages sent through RCSZilla.\n\nThe workflow fetches abandoned Shopify checkouts, waits one hour, checks whether the shopper is still abandoned, validates phone/SMS consent data, generates a short recovery SMS, queues it with RCSZilla, and logs the result to Google Sheets.\n\n## Setup Guide\n\n1. Install the RCSZilla community node package: n8n-nodes-rcszilla.\n2. Create an RCSZilla API credential in n8n.\n3. Create an OpenAI credential for the SMS writer model.\n4. Create an HTTP Header Auth credential for Shopify with header name X-Shopify-Access-Token and your Admin API access token as the value.\n5. Replace your-store.myshopify.com in both Shopify HTTP Request nodes.\n6. Configure the Google Sheets node with your own spreadsheet and these columns: customer, phone, checkout_url, sms_message, rcszilla_response.\n7. Run the workflow manually with a test abandoned checkout, then replace the Manual Trigger with a Schedule Trigger for production.\n\n## Compliance Notes\n\nOnly send SMS to customers who have opted in to SMS marketing. Keep the STOP opt-out text in the generated message. Do not use this workflow for unsolicited messages.",
+                                         "height":  2238,
+                                         "width":  1289,
+                                         "color":  4
+                                     },
+                      "id":  "0f722fcc-e05a-4b9d-9250-487a049779eb",
+                      "name":  "Sticky Note3",
+                      "type":  "n8n-nodes-base.stickyNote",
+                      "position":  [
+                                       384,
+                                       624
+                                   ],
+                      "typeVersion":  1
+                  },
+                  {
+                      "parameters":  {
+
+                                     },
+                      "id":  "7a5fce94-6ae8-43a3-9e45-b15e1d6ecf61",
+                      "name":  "No Operation, do nothing",
+                      "type":  "n8n-nodes-base.noOp",
+                      "position":  [
+                                       4000,
+                                       1008
+                                   ],
+                      "typeVersion":  1
+                  },
+                  {
+                      "parameters":  {
+
+                                     },
+                      "id":  "e8966160-eb7b-470c-9754-52048cb01551",
+                      "name":  "Start Workflow",
+                      "type":  "n8n-nodes-base.manualTrigger",
+                      "position":  [
+                                       2176,
+                                       672
+                                   ],
+                      "typeVersion":  1
+                  },
+                  {
+                      "parameters":  {
+                                         "url":  "https://your-store.myshopify.com/admin/api/2026-04/checkouts.json",
+                                         "sendQuery":  true,
+                                         "queryParameters":  {
+                                                                 "parameters":  [
+                                                                                    {
+                                                                                        "name":  "status",
+                                                                                        "value":  "abandoned"
+                                                                                    }
+                                                                                ]
+                                                             },
+                                         "options":  {
+
+                                                     },
+                                         "authentication":  "genericCredentialType",
+                                         "genericAuthType":  "httpHeaderAuth"
+                                     },
+                      "id":  "7ac542e0-5379-4416-a33e-c2ba13947a30",
+                      "name":  "Get Initial Abandoned Checkout",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "position":  [
+                                       2480,
+                                       672
+                                   ],
+                      "typeVersion":  4.2
+                  },
+                  {
+                      "parameters":  {
+                                         "amount":  1,
+                                         "unit":  "hours"
+                                     },
+                      "id":  "2409af7c-7df8-4825-b31a-7d2f4bb84a59",
+                      "name":  "Wait 1 Hour",
+                      "type":  "n8n-nodes-base.wait",
+                      "position":  [
+                                       2768,
+                                       672
+                                   ],
+                      "webhookId":  "12d15136-8aa1-4177-a572-04da4b88b28c",
+                      "typeVersion":  1.1
+                  },
+                  {
+                      "parameters":  {
+                                         "url":  "https://your-store.myshopify.com/admin/api/2026-04/checkouts.json",
+                                         "sendQuery":  true,
+                                         "queryParameters":  {
+                                                                 "parameters":  [
+                                                                                    {
+                                                                                        "name":  "status",
+                                                                                        "value":  "abandoned"
+                                                                                    }
+                                                                                ]
+                                                             },
+                                         "options":  {
+
+                                                     },
+                                         "authentication":  "genericCredentialType",
+                                         "genericAuthType":  "httpHeaderAuth"
+                                     },
+                      "id":  "449c40d4-e1fa-4984-9b3b-c9dd6863e71a",
+                      "name":  "Recheck Abandoned Checkouts",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "position":  [
+                                       3008,
+                                       704
+                                   ],
+                      "typeVersion":  4.2
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "version":  2,
+                                                                            "leftValue":  "",
+                                                                            "caseSensitive":  true,
+                                                                            "typeValidation":  "strict"
+                                                                        },
+                                                            "combinator":  "or",
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "8119001f-78d5-40b4-bcd7-8f13495b6d51",
+                                                                                   "operator":  {
+                                                                                                    "type":  "number",
+                                                                                                    "operation":  "equals"
+                                                                                                },
+                                                                                   "leftValue":  "={{ $(\u0027Get Initial Abandoned Checkout\u0027).item.json.checkouts[0].id }}",
+                                                                                   "rightValue":  "={{ $json.checkouts[0].id }}"
+                                                                               },
+                                                                               {
+                                                                                   "id":  "229cf7e1-5490-4bd0-9004-2baadbe15b4f",
+                                                                                   "operator":  {
+                                                                                                    "type":  "number",
+                                                                                                    "operation":  "equals"
+                                                                                                },
+                                                                                   "leftValue":  "={{ $(\u0027Get Initial Abandoned Checkout\u0027).item.json.checkouts[0].id }}",
+                                                                                   "rightValue":  "={{ $json.checkouts[1].id }}"
+                                                                               },
+                                                                               {
+                                                                                   "id":  "163c04b1-6e4b-42da-9a5f-2168c4148023",
+                                                                                   "operator":  {
+                                                                                                    "type":  "number",
+                                                                                                    "operation":  "equals"
+                                                                                                },
+                                                                                   "leftValue":  "={{ $(\u0027Get Initial Abandoned Checkout\u0027).item.json.checkouts[0].id }}",
+                                                                                   "rightValue":  "={{ $json.checkouts[2].id }}"
+                                                                               },
+                                                                               {
+                                                                                   "id":  "42461258-29f4-4dc2-9c34-598654debaa6",
+                                                                                   "operator":  {
+                                                                                                    "type":  "number",
+                                                                                                    "operation":  "equals"
+                                                                                                },
+                                                                                   "leftValue":  "={{ $(\u0027Get Initial Abandoned Checkout\u0027).item.json.checkouts[0].id }}",
+                                                                                   "rightValue":  "={{ $json.checkouts[3].id }}"
+                                                                               },
+                                                                               {
+                                                                                   "id":  "a0c9d76f-66fc-454b-b59c-990291c85ebf",
+                                                                                   "operator":  {
+                                                                                                    "type":  "number",
+                                                                                                    "operation":  "equals"
+                                                                                                },
+                                                                                   "leftValue":  "={{ $(\u0027Get Initial Abandoned Checkout\u0027).item.json.checkouts[0].id }}",
+                                                                                   "rightValue":  "={{ $json.checkouts[4].id }}"
+                                                                               }
+                                                                           ]
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "023ea763-155f-4c3c-8c3b-d7de0ef1687a",
+                      "name":  "Is Customer Still Abandoned?",
+                      "type":  "n8n-nodes-base.if",
+                      "position":  [
+                                       3280,
+                                       672
+                                   ],
+                      "typeVersion":  2.2
+                  },
+                  {
+                      "parameters":  {
+                                         "content":  "## 1. Fetch Abandoned Checkouts\n\nThe workflow starts manually for testing. For production, replace this with a Schedule Trigger that runs every 30 to 60 minutes.\n\nThe first HTTP Request reads abandoned Shopify checkouts. Configure the URL with your store domain and connect an HTTP Header Auth credential where the header name is X-Shopify-Access-Token.\n\nRequired Shopify access: abandoned checkout/order read access for the API route you use.",
+                                         "height":  600,
+                                         "width":  520
+                                     },
+                      "id":  "c0a92444-8d4d-4eeb-8c8f-7757d90dff2c",
+                      "name":  "Sticky Note4",
+                      "type":  "n8n-nodes-base.stickyNote",
+                      "position":  [
+                                       2128,
+                                       272
+                                   ],
+                      "typeVersion":  1
+                  },
+                  {
+                      "parameters":  {
+                                         "content":  "## 2. Wait And Recheck\n\nThe Wait node gives shoppers a grace period before any SMS is generated.\n\nAfter one hour, the second Shopify request checks whether the same checkout is still abandoned. If the checkout disappeared from the abandoned list, the workflow stops and does not message the customer.",
+                                         "height":  600,
+                                         "width":  460
+                                     },
+                      "id":  "4748bf2d-732b-48f5-a506-01ab5f5ebbe8",
+                      "name":  "Sticky Note5",
+                      "type":  "n8n-nodes-base.stickyNote",
+                      "position":  [
+                                       2720,
+                                       272
+                                   ],
+                      "typeVersion":  1
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "queueMessage",
+                                         "to":  "={{ $(\u0027Prepare SMS Recovery Data\u0027).item.json.phone }}",
+                                         "message":  "={{$json.output}}",
+                                         "channel":  "sms",
+                                         "scheduledAt":  ""
+                                     },
+                      "type":  "n8n-nodes-rcszilla.rcsZilla",
+                      "typeVersion":  1,
+                      "position":  [
+                                       4368,
+                                       448
+                                   ],
+                      "id":  "b00f271d-7643-4180-8e43-fe896478fd05",
+                      "name":  "RCSZilla"
+                  },
+                  {
+                      "parameters":  {
+                                         "promptType":  "define",
+                                         "text":  "=Write one concise abandoned checkout recovery SMS for {{ $json.customerName }}. Cart total: {{ $json.totalPrice }} {{ $json.currency }}. Recovery link: {{ $json.checkoutUrl }}. Cart items JSON: {{ $json.cartSummary }}. Requirements: under 320 characters, friendly, no subject line, no email formatting, include the exact phrase \u0027Reply STOP to opt out.\u0027",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "ecbb99d3-d896-48cc-b6b1-72e178329a3c",
+                      "name":  "Generate Recovery SMS",
+                      "type":  "@n8n/n8n-nodes-langchain.agent",
+                      "position":  [
+                                       4000,
+                                       448
+                                   ],
+                      "typeVersion":  1.9
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const checkout = $(\u0027Get Initial Abandoned Checkout\u0027).item.json.checkouts?.[0] ?? {};\nfunction present(v){return v !== undefined \u0026\u0026 v !== null \u0026\u0026 String(v).trim() !== \u0027\u0027;}\nfunction pick(...values){return values.find(present) ?? \u0027\u0027;}\nfunction cleanPhone(v){if(!present(v)) return \u0027\u0027; const s=String(v).trim(); if(s.startsWith(\u0027+\u0027)) return \u0027+\u0027 + s.slice(1).replace(/\\D/g, \u0027\u0027); return s.replace(/[^\\d+]/g, \u0027\u0027);}\nconst customer = checkout.customer ?? {};\nconst phone = cleanPhone(pick(checkout.phone, customer.phone, checkout.shipping_address?.phone, checkout.billing_address?.phone));\nconst firstName = pick(customer.first_name, checkout.customer_first_name, \u0027\u0027);\nconst lastName = pick(customer.last_name, checkout.customer_last_name, \u0027\u0027);\nconst customerName = [firstName, lastName].filter(Boolean).join(\u0027 \u0027) || \u0027customer\u0027;\nconst checkoutUrl = pick(checkout.abandoned_checkout_url, checkout.web_url, checkout.checkout_url, checkout.url);\nconst smsConsentRaw = pick(checkout.buyer_accepts_sms_marketing, customer.accepts_marketing, customer.sms_marketing_consent?.state, customer.sms_marketing_consent?.marketing_state, checkout.smsConsent);\nconst smsConsent = smsConsentRaw === true || [\u0027true\u0027,\u0027yes\u0027,\u00271\u0027,\u0027subscribed\u0027,\u0027SUBSCRIBED\u0027].includes(String(smsConsentRaw).trim());\nconst totalPrice = pick(checkout.total_price, checkout.totalPrice, checkout.total_line_items_price);\nconst currency = pick(checkout.currency, checkout.presentment_currency);\nconst cartSummary = JSON.stringify(checkout.line_items ?? checkout.lineItems ?? []);\nconst eligible = Boolean(phone \u0026\u0026 checkoutUrl \u0026\u0026 smsConsent);\nreturn [{json:{eligible, skipReason: eligible ? \u0027\u0027 : \u0027Missing phone, recovery URL, or SMS marketing consent\u0027, phone, checkoutUrl, customerName, firstName, totalPrice, currency, cartSummary, checkout}}];"
+                                     },
+                      "id":  "7f72539a-a02d-48b7-9501-2f32f8ed4de6",
+                      "name":  "Prepare SMS Recovery Data",
+                      "type":  "n8n-nodes-base.code",
+                      "position":  [
+                                       3600,
+                                       560
+                                   ],
+                      "typeVersion":  2
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "boolean":  [
+                                                                            {
+                                                                                "value1":  "={{$json.eligible}}",
+                                                                                "value2":  true
+                                                                            }
+                                                                        ]
+                                                        }
+                                     },
+                      "id":  "01f6ac8b-baf0-4427-b5a5-ad01020ee456",
+                      "name":  "Has SMS consent and phone?",
+                      "type":  "n8n-nodes-base.if",
+                      "position":  [
+                                       3760,
+                                       560
+                                   ],
+                      "typeVersion":  1
+                  }
+              ],
+    "pinData":  {
+
+                },
+    "connections":  {
+                        "Wait 1 Hour":  {
+                                            "main":  [
+                                                         [
+                                                             {
+                                                                 "node":  "Recheck Abandoned Checkouts",
+                                                                 "type":  "main",
+                                                                 "index":  0
+                                                             }
+                                                         ]
+                                                     ]
+                                        },
+                        "Start Workflow":  {
+                                               "main":  [
+                                                            [
+                                                                {
+                                                                    "node":  "Get Initial Abandoned Checkout",
+                                                                    "type":  "main",
+                                                                    "index":  0
+                                                                }
+                                                            ]
+                                                        ]
+                                           },
+                        "Recheck Abandoned Checkouts":  {
+                                                            "main":  [
+                                                                         [
+                                                                             {
+                                                                                 "node":  "Is Customer Still Abandoned?",
+                                                                                 "type":  "main",
+                                                                                 "index":  0
+                                                                             }
+                                                                         ]
+                                                                     ]
+                                                        },
+                        "Is Customer Still Abandoned?":  {
+                                                             "main":  [
+                                                                          [
+                                                                              {
+                                                                                  "node":  "Prepare SMS Recovery Data",
+                                                                                  "type":  "main",
+                                                                                  "index":  0
+                                                                              }
+                                                                          ],
+                                                                          [
+                                                                              {
+                                                                                  "node":  "No Operation, do nothing",
+                                                                                  "type":  "main",
+                                                                                  "index":  0
+                                                                              }
+                                                                          ]
+                                                                      ]
+                                                         },
+                        "Get Initial Abandoned Checkout":  {
+                                                               "main":  [
+                                                                            [
+                                                                                {
+                                                                                    "node":  "Wait 1 Hour",
+                                                                                    "type":  "main",
+                                                                                    "index":  0
+                                                                                }
+                                                                            ]
+                                                                        ]
+                                                           },
+                        "RCSZilla":  {
+                                         "main":  [
+                                                      [
+                                                          {
+                                                              "node":  "Log SMS Activity",
+                                                              "type":  "main",
+                                                              "index":  0
+                                                          }
+                                                      ]
+                                                  ]
+                                     },
+                        "Generate Recovery SMS":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "RCSZilla",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ]
+                                                               ]
+                                                  },
+                        "SMS Writer Model":  {
+                                                 "ai_languageModel":  [
+                                                                          [
+                                                                              {
+                                                                                  "node":  "Generate Recovery SMS",
+                                                                                  "type":  "ai_languageModel",
+                                                                                  "index":  0
+                                                                              }
+                                                                          ]
+                                                                      ]
+                                             },
+                        "Prepare SMS Recovery Data":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "Has SMS consent and phone?",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "Has SMS consent and phone?":  {
+                                                           "main":  [
+                                                                        [
+                                                                            {
+                                                                                "node":  "Generate Recovery SMS",
+                                                                                "type":  "main",
+                                                                                "index":  0
+                                                                            }
+                                                                        ],
+                                                                        [
+                                                                            {
+                                                                                "node":  "No Operation, do nothing",
+                                                                                "type":  "main",
+                                                                                "index":  0
+                                                                            }
+                                                                        ]
+                                                                    ]
+                                                       }
+                    },
+    "active":  false,
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "binaryMode":  "separate",
+                     "availableInMCP":  false
+                 },
+    "versionId":  "8dd4a9af-cb80-4dcc-9bd3-d8173436ad291",
+    "meta":  {
+                 "templateCredsSetupCompleted":  false
+             },
+    "id":  "shopify-abandoned-cart-ai-sms-rcszilla",
+    "tags":  [
+
+             ]
+}

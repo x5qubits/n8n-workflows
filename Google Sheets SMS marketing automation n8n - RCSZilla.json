@@ -1,0 +1,847 @@
+{
+  "name": "Run consent-based SMS marketing campaigns from Google Sheets with RCSZilla",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## SMS Marketing Automation\n\nThis workflow runs a consent-based SMS marketing campaign from Google Sheets and queues personalized messages through RCSZilla.\n\nIt is designed for local businesses, ecommerce stores, service providers, agencies, events, and teams that need a simple campaign sender with consent checks, dedupe, pacing, logging, and opt-out capture.",
+        "height": 300,
+        "width": 540,
+        "color": 4
+      },
+      "id": "0cb8885e-2a28-4f2b-9dd1-2f0ef0f84f12",
+      "name": "Workflow overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -980,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Setup Guide\n\n1. Install community node: n8n-nodes-rcszilla.\n2. Create credentials for Google Sheets and RCSZilla.\n3. Create a Google Sheet with tabs named Contacts, Send Log, and Opt Outs.\n4. In the Google Sheets nodes, replace PASTE_SMS_MARKETING_SHEET_ID with your sheet ID.\n5. Add test contacts with consent = yes before using real customers.\n6. Review the campaign settings inside Prepare campaign messages.\n7. Run Start SMS campaign manually, check Send Log, then activate only when your process is ready.\n\nOnly message contacts who gave clear SMS marketing consent.",
+        "height": 440,
+        "width": 600,
+        "color": 5
+      },
+      "id": "71d62363-e56e-41f6-8477-70d27c579b0b",
+      "name": "Setup guide",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -980,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Contacts Sheet Columns\n\nRecommended Contacts columns:\n\nphone, first_name, last_name, consent, opt_out, segment, campaign_status, send_after, offer_text, offer_url, message_template\n\nRequired:\n\nphone: recipient number with country code\nconsent: yes or true\ncampaign_status: leave blank before sending\n\nOptional:\n\nopt_out: yes skips the contact\nsegment: limits campaigns by audience\ncampaign_status is updated to queued after a successful RCSZilla queue call\nsend_after: future date/time before the contact is eligible\nmessage_template: supports {{first_name}}, {{offer_text}}, and {{offer_url}}",
+        "height": 500,
+        "width": 600,
+        "color": 6
+      },
+      "id": "e7235b9d-5cc3-4ad7-b67b-d6945ab0eac8",
+      "name": "Contacts sheet format",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -980,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Compliance Notes\n\nThis workflow is for permission-based SMS marketing.\n\nIt rejects contacts without consent, skips opt-outs, adds Reply STOP to the message, deduplicates phone numbers, limits send volume per run, and spaces scheduled messages so you do not blast every contact at the same second.\n\nKeep consent records outside this workflow. Do not use purchased lists or unsolicited contacts.",
+        "height": 340,
+        "width": 560,
+        "color": 3
+      },
+      "id": "c7fc5366-99bc-4ddd-9566-4f92f57382ab",
+      "name": "Compliance notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -300,
+        -380
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Opt-Out Capture\n\nThe opt-out webhook accepts inbound reply payloads such as:\n\n{\n  \"from\": \"+40700000000\",\n  \"message\": \"STOP\",\n  \"source\": \"RCSZilla\"\n}\n\nSTOP, UNSUBSCRIBE, CANCEL, END, and QUIT are saved to the Opt Outs tab.\n\nUse the Opt Outs tab to update your Contacts opt_out column before the next campaign run.",
+        "height": 420,
+        "width": 560,
+        "color": 7
+      },
+      "id": "b9bc0a19-fc83-452c-a4ed-75a22f41bb58",
+      "name": "Opt-out webhook guide",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        980,
+        -380
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "997fd9e9-4ded-453c-84ac-d72fa2ac28e7",
+      "name": "Start SMS campaign manually",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -220,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "read",
+        "authentication": "oAuth2",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "PASTE_SMS_MARKETING_SHEET_ID",
+          "cachedResultName": "SMS Marketing Workbook"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Contacts",
+          "cachedResultName": "Contacts"
+        },
+        "options": {
+          "dataLocationOnSheet": {
+            "values": {
+              "rangeDefinition": "detectAutomatically",
+              "readRowsUntil": "lastRowInSheet"
+            }
+          },
+          "returnAllMatches": "returnAllMatches"
+        }
+      },
+      "id": "1e857ea8-c2d0-4aac-ae2e-125f3f37b04d",
+      "name": "Read campaign contacts",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        80,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const CONFIG = {\n  campaignId: 'promo-campaign-001',\n  segment: '',\n  maxSendsPerRun: 50,\n  minSecondsBetweenMessages: 30,\n  enforceQuietHours: true,\n  quietStartHour: 9,\n  quietEndHour: 20,\n  defaultTemplate: 'Hi {{first_name}}, {{offer_text}} {{offer_url}} Reply STOP to opt out.',\n};\n\nfunction present(value) {\n  return value !== undefined && value !== null && String(value).trim() !== '';\n}\n\nfunction pick(row, names) {\n  for (const name of names) {\n    if (present(row[name])) return row[name];\n  }\n  return '';\n}\n\nfunction cleanPhone(value) {\n  if (!present(value)) return '';\n  const text = String(value).trim();\n  if (text.startsWith('+')) return '+' + text.slice(1).replace(/\\D/g, '');\n  return text.replace(/[^\\d+]/g, '');\n}\n\nfunction yes(value) {\n  return value === true || ['yes', 'true', '1', 'subscribed', 'opted in', 'opt-in', 'ok'].includes(String(value ?? '').trim().toLowerCase());\n}\n\nfunction formatScheduledAt(date) {\n  const pad = (part) => String(part).padStart(2, '0');\n  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;\n}\n\nfunction render(template, variables) {\n  return String(template || '').replace(/{{\\s*([a-zA-Z0-9_]+)\\s*}}/g, (_, key) => String(variables[key] ?? ''));\n}\n\nfunction shortMessage(message) {\n  const text = String(message || '').replace(/\\s+/g, ' ').trim();\n  const withOptOut = /\\bstop\\b/i.test(text) ? text : `${text} Reply STOP to opt out.`;\n  return withOptOut.length > 320 ? `${withOptOut.slice(0, 317)}...` : withOptOut;\n}\n\nconst now = new Date();\nconst localHour = now.getHours();\nconst inQuietWindow = localHour >= CONFIG.quietStartHour && localHour < CONFIG.quietEndHour;\nconst rows = $input.all();\nconst seenPhones = new Set();\nlet eligibleCount = 0;\n\nreturn rows.map((item, index) => {\n  const row = item.json;\n  const phone = cleanPhone(pick(row, ['phone', 'Phone', 'mobile', 'Mobile', 'to', 'To']));\n  const firstName = String(pick(row, ['first_name', 'First Name', 'firstName', 'name', 'Name']) || 'there').trim();\n  const lastName = String(pick(row, ['last_name', 'Last Name', 'lastName']) || '').trim();\n  const segment = String(pick(row, ['segment', 'Segment', 'audience', 'Audience']) || '').trim();\n  const status = String(pick(row, ['campaign_status', 'Campaign Status', 'status', 'Status']) || '').trim();\n  const offerText = String(pick(row, ['offer_text', 'Offer Text', 'offer', 'Offer']) || 'we have an update for you.').trim();\n  const offerUrl = String(pick(row, ['offer_url', 'Offer URL', 'url', 'URL']) || '').trim();\n  const template = pick(row, ['message_template', 'Message Template', 'message', 'Message']) || CONFIG.defaultTemplate;\n  const sendAfterValue = pick(row, ['send_after', 'Send After', 'sendAfter']);\n  const sendAfter = present(sendAfterValue) ? new Date(sendAfterValue) : null;\n  const errors = [];\n\n  if (!phone) errors.push('Missing phone');\n  if (!yes(pick(row, ['consent', 'Consent', 'sms_consent', 'SMS Consent', 'opt_in', 'Opt In']))) errors.push('Missing SMS marketing consent');\n  if (yes(pick(row, ['opt_out', 'Opt Out', 'suppressed', 'Suppressed', 'unsubscribe', 'Unsubscribe']))) errors.push('Contact opted out');\n  if (/\\b(sent|queued|delivered)\\b/i.test(status)) errors.push('Campaign already sent or queued');\n  if (CONFIG.segment && segment.toLowerCase() !== CONFIG.segment.toLowerCase()) errors.push('Not in selected segment');\n  if (CONFIG.enforceQuietHours && !inQuietWindow) errors.push('Outside configured sending hours');\n  if (phone && seenPhones.has(phone)) errors.push('Duplicate phone in this run');\n  if (sendAfter && !Number.isNaN(sendAfter.getTime()) && sendAfter > now) errors.push('Send-after time has not arrived');\n  if (eligibleCount >= CONFIG.maxSendsPerRun) errors.push('Run send limit reached');\n\n  if (phone) seenPhones.add(phone);\n\n  const message = shortMessage(render(template, {\n    first_name: firstName,\n    last_name: lastName,\n    offer_text: offerText,\n    offer_url: offerUrl,\n    segment,\n    campaign_id: CONFIG.campaignId,\n  }));\n\n  const eligible = errors.length === 0;\n  const scheduledDate = new Date(now.getTime() + eligibleCount * CONFIG.minSecondsBetweenMessages * 1000);\n  const scheduledAt = eligible ? formatScheduledAt(scheduledDate) : '';\n  if (eligible) eligibleCount += 1;\n\n  return {\n    json: {\n      eligible,\n      skipReason: errors.join('; '),\n      campaignId: CONFIG.campaignId,\n      phone,\n      firstName,\n      lastName,\n      segment,\n      message,\n      scheduledAt,\n      sourceRow: row.row_number || row.__rowNumber || index + 2,\n      originalStatus: status,\n    },\n  };\n});"
+      },
+      "id": "d22708fd-68f4-4b01-a434-c6cbbd1233de",
+      "name": "Prepare campaign messages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        380,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.eligible}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "2c841e99-3f55-44dd-b30a-db7a1519da5b",
+      "name": "Eligible to send?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        700,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "queueMessage",
+        "to": "={{$json.phone}}",
+        "message": "={{$json.message}}",
+        "channel": "sms",
+        "scheduledAt": "={{$json.scheduledAt}}"
+      },
+      "id": "a99b88a9-3897-4f16-84c4-338578bbcf93",
+      "name": "Queue marketing SMS with RCSZilla",
+      "type": "n8n-nodes-rcszilla.rcsZilla",
+      "typeVersion": 1,
+      "position": [
+        1020,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "update",
+        "authentication": "oAuth2",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "PASTE_SMS_MARKETING_SHEET_ID",
+          "cachedResultName": "SMS Marketing Workbook"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Contacts",
+          "cachedResultName": "Contacts"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{$('Prepare campaign messages').item.json.sourceRow}}",
+            "campaign_status": "queued"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "campaign_status",
+              "displayName": "campaign_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "d80a6d4a-5245-4e51-a67d-4c900af95fbc",
+      "name": "Mark contact queued",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1320,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "append",
+        "authentication": "oAuth2",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "PASTE_SMS_MARKETING_SHEET_ID",
+          "cachedResultName": "SMS Marketing Workbook"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Send Log",
+          "cachedResultName": "Send Log"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{$now.toISO()}}",
+            "campaign_id": "={{$('Prepare campaign messages').item.json.campaignId}}",
+            "phone": "={{$('Prepare campaign messages').item.json.phone}}",
+            "first_name": "={{$('Prepare campaign messages').item.json.firstName}}",
+            "segment": "={{$('Prepare campaign messages').item.json.segment}}",
+            "status": "queued",
+            "scheduled_at": "={{$('Prepare campaign messages').item.json.scheduledAt}}",
+            "message": "={{$('Prepare campaign messages').item.json.message}}",
+            "skip_reason": "",
+            "source_row": "={{$('Prepare campaign messages').item.json.sourceRow}}",
+            "rcszilla_response": "={{JSON.stringify($('Queue marketing SMS with RCSZilla').item.json)}}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "campaign_id",
+              "displayName": "campaign_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "first_name",
+              "displayName": "first_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "segment",
+              "displayName": "segment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scheduled_at",
+              "displayName": "scheduled_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "message",
+              "displayName": "message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "skip_reason",
+              "displayName": "skip_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source_row",
+              "displayName": "source_row",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "rcszilla_response",
+              "displayName": "rcszilla_response",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "26ae555a-eb64-443f-af99-7555ccbd7df7",
+      "name": "Log queued SMS",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1620,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "append",
+        "authentication": "oAuth2",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "PASTE_SMS_MARKETING_SHEET_ID",
+          "cachedResultName": "SMS Marketing Workbook"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Send Log",
+          "cachedResultName": "Send Log"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{$now.toISO()}}",
+            "campaign_id": "={{$json.campaignId}}",
+            "phone": "={{$json.phone}}",
+            "first_name": "={{$json.firstName}}",
+            "segment": "={{$json.segment}}",
+            "status": "skipped",
+            "scheduled_at": "",
+            "message": "={{$json.message}}",
+            "skip_reason": "={{$json.skipReason}}",
+            "source_row": "={{$json.sourceRow}}",
+            "rcszilla_response": ""
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "campaign_id",
+              "displayName": "campaign_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "first_name",
+              "displayName": "first_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "segment",
+              "displayName": "segment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scheduled_at",
+              "displayName": "scheduled_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "message",
+              "displayName": "message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "skip_reason",
+              "displayName": "skip_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source_row",
+              "displayName": "source_row",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "rcszilla_response",
+              "displayName": "rcszilla_response",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "83fdd865-23a1-4863-9d7c-124bc4d13de4",
+      "name": "Log skipped contact",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1020,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sms-marketing-opt-out",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "75101424-ea66-4763-b3de-3d49495a40af",
+      "name": "SMS opt-out webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        920,
+        560
+      ],
+      "webhookId": "sms-marketing-opt-out"
+    },
+    {
+      "parameters": {
+        "jsCode": "function present(value) {\n  return value !== undefined && value !== null && String(value).trim() !== '';\n}\n\nfunction cleanPhone(value) {\n  if (!present(value)) return '';\n  const text = String(value).trim();\n  if (text.startsWith('+')) return '+' + text.slice(1).replace(/\\D/g, '');\n  return text.replace(/[^\\d+]/g, '');\n}\n\nconst payload = $json.body ?? $json;\nconst message = String(payload.message ?? payload.text ?? payload.body ?? '').trim();\nconst phone = cleanPhone(payload.from ?? payload.fromPhone ?? payload.phone ?? payload.sender ?? payload.to);\nconst keywordMatch = message.match(/\\b(STOP|UNSUBSCRIBE|CANCEL|END|QUIT)\\b/i);\n\nreturn [{\n  json: {\n    isOptOut: Boolean(phone && keywordMatch),\n    phone,\n    keyword: keywordMatch ? keywordMatch[1].toUpperCase() : '',\n    message,\n    source: payload.source ?? 'inbound SMS webhook',\n    receivedAt: new Date().toISOString(),\n  },\n}];"
+      },
+      "id": "ff1dc4c8-eab8-483b-a8a7-3c175d02de23",
+      "name": "Normalize opt-out reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1220,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.isOptOut}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "b4949b40-acac-47c5-a2ad-e787006b0ac2",
+      "name": "Is opt-out keyword?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1520,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "append",
+        "authentication": "oAuth2",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "PASTE_SMS_MARKETING_SHEET_ID",
+          "cachedResultName": "SMS Marketing Workbook"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Opt Outs",
+          "cachedResultName": "Opt Outs"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "received_at": "={{$json.receivedAt}}",
+            "phone": "={{$json.phone}}",
+            "keyword": "={{$json.keyword}}",
+            "message": "={{$json.message}}",
+            "source": "={{$json.source}}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "received_at",
+              "displayName": "received_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "keyword",
+              "displayName": "keyword",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "message",
+              "displayName": "message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "84880515-6d24-4d70-9f91-acb3219131f9",
+      "name": "Save opt-out to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1820,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, status: 'opt_out_saved', phone: $('Normalize opt-out reply').item.json.phone } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "18db445d-5662-402c-aae5-2599d8185f99",
+      "name": "Respond opt-out saved",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2120,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, status: 'ignored', reason: 'No opt-out keyword or phone number found' } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "6c2c0a32-a21e-40a6-a6a7-d24d5f839d10",
+      "name": "Respond ignored reply",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1820,
+        680
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Start SMS campaign manually": {
+      "main": [
+        [
+          {
+            "node": "Read campaign contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read campaign contacts": {
+      "main": [
+        [
+          {
+            "node": "Prepare campaign messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare campaign messages": {
+      "main": [
+        [
+          {
+            "node": "Eligible to send?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eligible to send?": {
+      "main": [
+        [
+          {
+            "node": "Queue marketing SMS with RCSZilla",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log skipped contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Queue marketing SMS with RCSZilla": {
+      "main": [
+        [
+          {
+            "node": "Mark contact queued",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark contact queued": {
+      "main": [
+        [
+          {
+            "node": "Log queued SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SMS opt-out webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize opt-out reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize opt-out reply": {
+      "main": [
+        [
+          {
+            "node": "Is opt-out keyword?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is opt-out keyword?": {
+      "main": [
+        [
+          {
+            "node": "Save opt-out to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond ignored reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save opt-out to Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Respond opt-out saved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "dd4c2352-0472-494f-aa2b-61180e36ec62",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "google-sheets-sms-marketing-automation-rcszilla",
+  "tags": []
+}

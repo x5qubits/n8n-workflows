@@ -1,0 +1,337 @@
+{
+    "name":  "WooCommerce order SMS notifications via RCSZilla",
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "content":  "## Description\n\nSend automatic SMS notifications to WooCommerce customers when their order status changes. Supported statuses: processing, completed, on-hold, cancelled, refunded, and failed.\n\nThe workflow listens for WooCommerce order.updated webhook events, extracts the customer billing phone and order data, builds a status-specific SMS message, queues it through RCSZilla, and logs the result to Google Sheets.\n\n## Setup Guide\n\n1. Install the RCSZilla community node package: n8n-nodes-rcszilla.\n2. Create an RCSZilla API credential in n8n.\n3. Create a WooCommerce credential in n8n using your store URL, consumer key, and consumer secret.\n4. Assign the WooCommerce credential to the WooCommerce Order Updated trigger node.\n5. Activate the workflow. n8n registers the webhook in your WooCommerce store automatically.\n6. Create and assign a Google Sheets credential.\n7. Create a Google Sheet with these columns: order_id, customer, phone, status, total, sms_message, rcszilla_response.\n8. In the Google Sheets node, replace PASTE_GOOGLE_SHEET_ID with your spreadsheet ID.\n9. Trigger a test order status change in WooCommerce to verify end-to-end delivery.\n\n## Compliance Notes\n\nOnly send SMS to customers who opted in at checkout. Confirm your SMS rules and quiet hours for each country you ship to. Keep the Reply STOP to opt out line in every message template.",
+                                         "height":  1300,
+                                         "width":  560,
+                                         "color":  4
+                                     },
+                      "id":  "a0000001-0000-0000-0000-000000000001",
+                      "name":  "Sticky Note",
+                      "type":  "n8n-nodes-base.stickyNote",
+                      "position":  [
+                                       0,
+                                       0
+                                   ],
+                      "typeVersion":  1
+                  },
+                  {
+                      "parameters":  {
+                                         "content":  "## Template Notes\n\nBefore activating this workflow:\n\n- Create a WooCommerce API credential with consumer key and consumer secret from your store.\n- Create an RCSZilla API credential.\n- Create a Google Sheets credential.\n- Edit the message templates in the Prepare SMS Notification Data node if you want different wording.\n- Confirm that WooCommerce collects billing phone numbers at checkout.\n- Test with an internal test order before enabling for live customers.",
+                                         "height":  240,
+                                         "width":  1200,
+                                         "color":  4
+                                     },
+                      "id":  "a0000002-0000-0000-0000-000000000002",
+                      "name":  "Sticky Note1",
+                      "type":  "n8n-nodes-base.stickyNote",
+                      "position":  [
+                                       640,
+                                       80
+                                   ],
+                      "typeVersion":  1
+                  },
+                  {
+                      "parameters":  {
+                                         "content":  "## 1. Listen for Order Status Changes\n\nThe WooCommerce trigger registers a webhook in your store and fires whenever an order is updated.\n\nWooCommerce calls this webhook on every order status change: pending to processing, processing to completed, processing to cancelled, and so on.\n\nRequires a WooCommerce credential with consumer key and consumer secret.",
+                                         "height":  440,
+                                         "width":  340
+                                     },
+                      "id":  "a0000003-0000-0000-0000-000000000003",
+                      "name":  "Sticky Note2",
+                      "type":  "n8n-nodes-base.stickyNote",
+                      "position":  [
+                                       592,
+                                       640
+                                   ],
+                      "typeVersion":  1
+                  },
+                  {
+                      "parameters":  {
+                                         "content":  "## 2. Prepare Order Data\n\nThe Code node extracts billing phone, customer name, order ID, status, and total from the WooCommerce order payload.\n\nIt builds a pre-written SMS message for six order statuses: processing, completed, on-hold, cancelled, refunded, and failed.\n\nIf no phone number is found or the status has no template, the eligible flag is false and the SMS path is skipped.",
+                                         "height":  440,
+                                         "width":  360
+                                     },
+                      "id":  "a0000004-0000-0000-0000-000000000004",
+                      "name":  "Sticky Note3",
+                      "type":  "n8n-nodes-base.stickyNote",
+                      "position":  [
+                                       832,
+                                       640
+                                   ],
+                      "typeVersion":  1
+                  },
+                  {
+                      "parameters":  {
+                                         "content":  "## 3. Send SMS and Log Result\n\nThe IF node only continues to RCSZilla when a billing phone and a status-matched message template are both present.\n\nRCSZilla queues the pre-built SMS via the sms channel. No AI model is needed for this workflow.\n\nGoogle Sheets logs each notification with the order ID, customer, phone, status, message copy, and RCSZilla response.",
+                                         "height":  440,
+                                         "width":  620,
+                                         "color":  5
+                                     },
+                      "id":  "a0000005-0000-0000-0000-000000000005",
+                      "name":  "Sticky Note4",
+                      "type":  "n8n-nodes-base.stickyNote",
+                      "position":  [
+                                       1072,
+                                       640
+                                   ],
+                      "typeVersion":  1
+                  },
+                  {
+                      "parameters":  {
+                                         "event":  "order.updated"
+                                     },
+                      "id":  "b1000001-0000-0000-0000-000000000001",
+                      "name":  "WooCommerce Order Updated",
+                      "type":  "n8n-nodes-base.wooCommerceTrigger",
+                      "position":  [
+                                       640,
+                                       400
+                                   ],
+                      "typeVersion":  1,
+                      "webhookId":  "woo-rcszilla-order-sms-webhook"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const order = $input.item.json;\nconst billing = order.billing ?? {};\nfunction present(v) { return v !== undefined && v !== null && String(v).trim() !== ''; }\nfunction cleanPhone(v) { if (!present(v)) return ''; const s = String(v).trim(); if (s.startsWith('+')) return '+' + s.slice(1).replace(/\\D/g, ''); return s.replace(/[^\\d+]/g, ''); }\nconst phone = cleanPhone(billing.phone ?? '');\nconst firstName = billing.first_name ?? '';\nconst lastName = billing.last_name ?? '';\nconst customerName = [firstName, lastName].filter(Boolean).join(' ') || 'customer';\nconst orderId = String(order.id ?? order.number ?? '');\nconst status = (order.status ?? '').toLowerCase();\nconst total = order.total ?? '';\nconst currency = order.currency ?? '';\nconst messages = {\n  'processing': 'Hi ' + customerName + '! Your order #' + orderId + ' is now being processed. Total: ' + total + ' ' + currency + '. We will update you when it ships. Reply STOP to opt out.',\n  'completed': 'Hi ' + customerName + '! Your order #' + orderId + ' is complete. Thank you for your purchase! Reply STOP to opt out.',\n  'on-hold': 'Hi ' + customerName + ', your order #' + orderId + ' is on hold. We will be in touch with more details shortly. Reply STOP to opt out.',\n  'cancelled': 'Hi ' + customerName + ', your order #' + orderId + ' has been cancelled. Contact us if this was unexpected. Reply STOP to opt out.',\n  'refunded': 'Hi ' + customerName + ', your refund for order #' + orderId + ' has been issued. Please allow a few business days. Reply STOP to opt out.',\n  'failed': 'Hi ' + customerName + ', payment for order #' + orderId + ' could not be processed. Please retry or contact us for help. Reply STOP to opt out.'\n};\nconst smsMessage = messages[status] ?? '';\nconst eligible = Boolean(phone && smsMessage);\nreturn [{ json: { eligible, skipReason: eligible ? '' : (!phone ? 'No billing phone number on order' : 'Order status has no configured SMS template'), phone, customerName, orderId, status, total, currency, smsMessage } }];"
+                                     },
+                      "id":  "b2000001-0000-0000-0000-000000000001",
+                      "name":  "Prepare SMS Notification Data",
+                      "type":  "n8n-nodes-base.code",
+                      "position":  [
+                                       880,
+                                       400
+                                   ],
+                      "typeVersion":  2
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "boolean":  [
+                                                                            {
+                                                                                "value1":  "={{$json.eligible}}",
+                                                                                "value2":  true
+                                                                            }
+                                                                        ]
+                                                        }
+                                     },
+                      "id":  "b3000001-0000-0000-0000-000000000001",
+                      "name":  "Has phone and notifiable status?",
+                      "type":  "n8n-nodes-base.if",
+                      "position":  [
+                                       1120,
+                                       400
+                                   ],
+                      "typeVersion":  1
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "queueMessage",
+                                         "to":  "={{ $('Prepare SMS Notification Data').item.json.phone }}",
+                                         "message":  "={{ $('Prepare SMS Notification Data').item.json.smsMessage }}",
+                                         "channel":  "sms",
+                                         "scheduledAt":  ""
+                                     },
+                      "type":  "n8n-nodes-rcszilla.rcsZilla",
+                      "typeVersion":  1,
+                      "position":  [
+                                       1360,
+                                       320
+                                   ],
+                      "id":  "b4000001-0000-0000-0000-000000000001",
+                      "name":  "RCSZilla"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "append",
+                                         "documentId":  {
+                                                             "__rl":  true,
+                                                             "mode":  "id",
+                                                             "value":  "PASTE_GOOGLE_SHEET_ID"
+                                                         },
+                                         "sheetName":  {
+                                                            "__rl":  true,
+                                                            "mode":  "name",
+                                                            "value":  "Sheet1"
+                                                        },
+                                         "columns":  {
+                                                          "value":  {
+                                                                        "order_id":  "={{ $('Prepare SMS Notification Data').item.json.orderId }}",
+                                                                        "customer":  "={{ $('Prepare SMS Notification Data').item.json.customerName }}",
+                                                                        "phone":  "={{ $('Prepare SMS Notification Data').item.json.phone }}",
+                                                                        "status":  "={{ $('Prepare SMS Notification Data').item.json.status }}",
+                                                                        "total":  "={{ $('Prepare SMS Notification Data').item.json.total }}",
+                                                                        "sms_message":  "={{ $('Prepare SMS Notification Data').item.json.smsMessage }}",
+                                                                        "rcszilla_response":  "={{ JSON.stringify($json) }}"
+                                                                    },
+                                                          "schema":  [
+                                                                         {
+                                                                             "id":  "order_id",
+                                                                             "type":  "string",
+                                                                             "display":  true,
+                                                                             "required":  false,
+                                                                             "displayName":  "order_id",
+                                                                             "defaultMatch":  false,
+                                                                             "canBeUsedToMatch":  true
+                                                                         },
+                                                                         {
+                                                                             "id":  "customer",
+                                                                             "type":  "string",
+                                                                             "display":  true,
+                                                                             "required":  false,
+                                                                             "displayName":  "customer",
+                                                                             "defaultMatch":  false,
+                                                                             "canBeUsedToMatch":  true
+                                                                         },
+                                                                         {
+                                                                             "id":  "phone",
+                                                                             "type":  "string",
+                                                                             "display":  true,
+                                                                             "required":  false,
+                                                                             "displayName":  "phone",
+                                                                             "defaultMatch":  false,
+                                                                             "canBeUsedToMatch":  true
+                                                                         },
+                                                                         {
+                                                                             "id":  "status",
+                                                                             "type":  "string",
+                                                                             "display":  true,
+                                                                             "required":  false,
+                                                                             "displayName":  "status",
+                                                                             "defaultMatch":  false,
+                                                                             "canBeUsedToMatch":  true
+                                                                         },
+                                                                         {
+                                                                             "id":  "total",
+                                                                             "type":  "string",
+                                                                             "display":  true,
+                                                                             "required":  false,
+                                                                             "displayName":  "total",
+                                                                             "defaultMatch":  false,
+                                                                             "canBeUsedToMatch":  true
+                                                                         },
+                                                                         {
+                                                                             "id":  "sms_message",
+                                                                             "type":  "string",
+                                                                             "display":  true,
+                                                                             "required":  false,
+                                                                             "displayName":  "sms_message",
+                                                                             "defaultMatch":  false,
+                                                                             "canBeUsedToMatch":  true
+                                                                         },
+                                                                         {
+                                                                             "id":  "rcszilla_response",
+                                                                             "type":  "string",
+                                                                             "display":  true,
+                                                                             "required":  false,
+                                                                             "displayName":  "rcszilla_response",
+                                                                             "defaultMatch":  false,
+                                                                             "canBeUsedToMatch":  true
+                                                                         }
+                                                                     ],
+                                                          "mappingMode":  "defineBelow",
+                                                          "matchingColumns":  [
+
+                                                                              ],
+                                                          "attemptToConvertTypes":  false,
+                                                          "convertFieldsToString":  false
+                                                      },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "b5000001-0000-0000-0000-000000000001",
+                      "name":  "Log SMS Activity",
+                      "type":  "n8n-nodes-base.googleSheets",
+                      "position":  [
+                                       1600,
+                                       320
+                                   ],
+                      "typeVersion":  4.5
+                  },
+                  {
+                      "parameters":  {
+
+                                     },
+                      "id":  "b6000001-0000-0000-0000-000000000001",
+                      "name":  "No Operation, do nothing",
+                      "type":  "n8n-nodes-base.noOp",
+                      "position":  [
+                                       1360,
+                                       560
+                                   ],
+                      "typeVersion":  1
+                  }
+              ],
+    "pinData":  {
+
+                },
+    "connections":  {
+                        "WooCommerce Order Updated":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "Prepare SMS Notification Data",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "Prepare SMS Notification Data":  {
+                                                              "main":  [
+                                                                           [
+                                                                               {
+                                                                                   "node":  "Has phone and notifiable status?",
+                                                                                   "type":  "main",
+                                                                                   "index":  0
+                                                                               }
+                                                                           ]
+                                                                       ]
+                                                          },
+                        "Has phone and notifiable status?":  {
+                                                                 "main":  [
+                                                                              [
+                                                                                  {
+                                                                                      "node":  "RCSZilla",
+                                                                                      "type":  "main",
+                                                                                      "index":  0
+                                                                                  }
+                                                                              ],
+                                                                              [
+                                                                                  {
+                                                                                      "node":  "No Operation, do nothing",
+                                                                                      "type":  "main",
+                                                                                      "index":  0
+                                                                                  }
+                                                                              ]
+                                                                          ]
+                                                             },
+                        "RCSZilla":  {
+                                         "main":  [
+                                                      [
+                                                          {
+                                                              "node":  "Log SMS Activity",
+                                                              "type":  "main",
+                                                              "index":  0
+                                                          }
+                                                      ]
+                                                  ]
+                                     }
+                    },
+    "active":  false,
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "availableInMCP":  false
+                 },
+    "versionId":  "woocommerce-sms-rcszilla-v1-2026050901",
+    "meta":  {
+                 "templateCredsSetupCompleted":  false
+             },
+    "id":  "woocommerce-order-sms-notifications-rcszilla",
+    "tags":  [
+
+             ]
+}

@@ -1,0 +1,250 @@
+{
+  "name": "Send OpenCart order and delivery SMS notifications with RCSZilla",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## n8n OpenCart SMS notifications\n\nThis workflow receives OpenCart order status events, prepares a customer-friendly SMS update, checks phone and SMS consent, then queues the message through RCSZilla.\n\nUse it for order confirmations, shipped notifications, out-for-delivery updates, delivered messages, canceled orders, failed payments, and refund updates.",
+        "height": 300,
+        "width": 560,
+        "color": 4
+      },
+      "id": "a31c1841-bdb4-4705-b62c-51f9fef2318a",
+      "name": "Workflow overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -860,
+        -340
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Setup Guide\n\n1. Install community node: n8n-nodes-rcszilla.\n2. Create RCSZilla credentials in n8n.\n3. Activate this workflow and copy the production webhook URL.\n4. If you only need standard OpenCart SMS, the official RCSZilla OpenCart plugin may be enough.\n5. Use this n8n workflow when you need custom routing, logging, CRM updates, extra validation, or multi-step automation.\n6. In OpenCart, use an order-status extension, event hook, or small custom module to POST order updates to this webhook.\n7. Send a test payload with one internal phone number and sms_consent = true.\n8. Confirm the skipped and queued webhook responses before using live orders.",
+        "height": 440,
+        "width": 620,
+        "color": 5
+      },
+      "id": "66d9104d-9ac6-49c4-aea6-0f021f54d9e5",
+      "name": "Setup guide",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -860,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Webhook Payload\n\nPOST JSON to the webhook:\n\n{\n  \"order_id\": \"12345\",\n  \"order_status\": \"shipped\",\n  \"first_name\": \"Maria\",\n  \"telephone\": \"+40700000000\",\n  \"sms_consent\": true,\n  \"store_name\": \"Demo Store\",\n  \"order_total\": \"129.00 RON\",\n  \"shipping_method\": \"Courier\",\n  \"tracking_number\": \"AWB123\",\n  \"tracking_url\": \"https://tracking.example/AWB123\",\n  \"channel\": \"sms\"\n}\n\nThe workflow also reads common alternatives such as phone, customer_phone, orderStatus, status, customer.firstname, customer.telephone, trackingNumber, and trackingUrl.",
+        "height": 480,
+        "width": 620,
+        "color": 6
+      },
+      "id": "fbe9948f-4f44-4743-8da0-257e0a5dbd6d",
+      "name": "Payload contract",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -860,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Status Message Mapping\n\nSupported statuses:\n\npending\nprocessing\nshipped\nout_for_delivery\ndelivered\ncanceled\nfailed\nrefunded\n\nAliases are included for common values like complete, completed, dispatched, cancelled, and refund.\n\nIf your OpenCart store sends numeric status IDs, edit the statusAliases object in Prepare OpenCart SMS notification to map your IDs to these names.",
+        "height": 400,
+        "width": 560,
+        "color": 7
+      },
+      "id": "5a5e5b2a-1f37-4cb2-b0f2-6b48314981fe",
+      "name": "Status mapping",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -180,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Compliance Notes\n\nSend SMS only when the customer agreed to order updates by SMS.\n\nThis workflow requires sms_consent, transactional_sms_allowed, consent, or opt_in to be true. It also skips contacts marked sms_opt_out, opt_out, unsubscribe, or do_not_sms.\n\nKeep Reply STOP to opt out in the message unless your legal process requires different wording.",
+        "height": 340,
+        "width": 560,
+        "color": 3
+      },
+      "id": "7ac55c76-78b8-4726-b58a-69f7df604298",
+      "name": "Compliance notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        500,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "opencart-order-sms-notifications",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "2763b611-6c66-45ac-a275-d72edbdcbf4c",
+      "name": "OpenCart order webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -140,
+        180
+      ],
+      "webhookId": "opencart-order-sms-notifications"
+    },
+    {
+      "parameters": {
+        "jsCode": "function present(value) {\n  return value !== undefined && value !== null && String(value).trim() !== '';\n}\n\nfunction getPath(source, path) {\n  return path.split('.').reduce((value, key) => (value && value[key] !== undefined ? value[key] : undefined), source);\n}\n\nfunction pick(source, names) {\n  for (const name of names) {\n    const value = name.includes('.') ? getPath(source, name) : source[name];\n    if (present(value)) return value;\n  }\n  return '';\n}\n\nfunction bool(value) {\n  return value === true || ['true', 'yes', '1', 'subscribed', 'allowed', 'opted in', 'opt-in', 'ok'].includes(String(value ?? '').trim().toLowerCase());\n}\n\nfunction cleanPhone(value) {\n  if (!present(value)) return '';\n  const text = String(value).trim();\n  if (text.startsWith('+')) return '+' + text.slice(1).replace(/\\D/g, '');\n  return text.replace(/[^\\d+]/g, '');\n}\n\nfunction compact(text) {\n  return String(text || '').replace(/\\s+/g, ' ').trim();\n}\n\nfunction withOptOut(message) {\n  const text = compact(message);\n  const finalText = /\\bstop\\b/i.test(text) ? text : `${text} Reply STOP to opt out.`;\n  return finalText.length > 320 ? `${finalText.slice(0, 317)}...` : finalText;\n}\n\nconst payload = $json.body ?? $json;\nconst order = payload.order ?? payload.data ?? payload;\nconst statusAliases = {\n  pending: 'pending',\n  processing: 'processing',\n  processed: 'processing',\n  paid: 'processing',\n  shipped: 'shipped',\n  dispatched: 'shipped',\n  dispatch: 'shipped',\n  'out for delivery': 'out_for_delivery',\n  out_for_delivery: 'out_for_delivery',\n  outfordelivery: 'out_for_delivery',\n  complete: 'delivered',\n  completed: 'delivered',\n  delivered: 'delivered',\n  canceled: 'canceled',\n  cancelled: 'canceled',\n  failed: 'failed',\n  voided: 'failed',\n  refunded: 'refunded',\n  refund: 'refunded'\n};\n\nconst rawStatus = compact(pick(order, ['order_status', 'orderStatus', 'order_status_name', 'status_name', 'status', 'history.status', 'order.order_status'])).toLowerCase().replace(/[\\-_]+/g, ' ');\nconst orderStatus = statusAliases[rawStatus] || rawStatus.replace(/\\s+/g, '_');\nconst supportedStatuses = ['pending', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'canceled', 'failed', 'refunded'];\nconst orderId = compact(pick(order, ['order_id', 'orderId', 'id', 'order.order_id']));\nconst orderDate = compact(pick(order, ['order_date', 'orderDate', 'date_added', 'dateAdded']));\nconst orderTotal = compact(pick(order, ['order_total', 'orderTotal', 'total', 'totals.total']));\nconst firstName = compact(pick(order, ['firstname', 'first_name', 'customer.firstname', 'customer.first_name', 'payment_firstname', 'shipping_firstname'])) || 'there';\nconst storeName = compact(pick(order, ['store_name', 'storeName', 'store.name'])) || 'our store';\nconst storeUrl = compact(pick(order, ['store_url', 'storeUrl', 'store.url']));\nconst shippingMethod = compact(pick(order, ['shipping_method', 'shippingMethod', 'shipping.method']));\nconst phone = cleanPhone(pick(order, ['telephone', 'phone', 'customer_phone', 'customer.telephone', 'customer.phone', 'payment_telephone', 'shipping_phone', 'shipping_telephone']));\nconst channelValue = compact(pick(order, ['channel', 'message_channel', 'messageChannel'])).toLowerCase();\nconst channel = ['sms', 'whatsapp'].includes(channelValue) ? channelValue : 'sms';\nconst trackingNumber = compact(pick(order, ['tracking_number', 'trackingNumber', 'tracking.code', 'shipment.tracking_number']));\nconst trackingUrl = compact(pick(order, ['tracking_url', 'trackingUrl', 'tracking.url', 'shipment.tracking_url']));\nconst consent = bool(pick(order, ['sms_consent', 'smsConsent', 'transactional_sms_allowed', 'transactionalSmsAllowed', 'consent', 'opt_in', 'customer.sms_consent', 'customer.transactional_sms_allowed']));\nconst optedOut = bool(pick(order, ['sms_opt_out', 'smsOptOut', 'opt_out', 'do_not_sms', 'unsubscribe', 'customer.sms_opt_out', 'customer.opt_out']));\nconst totalText = orderTotal ? ` Total: ${orderTotal}.` : '';\nconst dateText = orderDate ? ` Date: ${orderDate}.` : '';\nconst shippingText = shippingMethod ? ` Shipping: ${shippingMethod}.` : '';\nconst storeText = storeUrl ? ` ${storeUrl}` : '';\nconst trackingText = trackingUrl ? ` Track: ${trackingUrl}` : (trackingNumber ? ` Tracking: ${trackingNumber}` : '');\nconst messages = {\n  pending: `Hi ${firstName}, ${storeName} received order #${orderId}.${totalText}${dateText}`,\n  processing: `Hi ${firstName}, ${storeName} is processing order #${orderId}.${totalText}${shippingText}`,\n  shipped: `Hi ${firstName}, order #${orderId} from ${storeName} has shipped.${trackingText}`,\n  out_for_delivery: `Hi ${firstName}, order #${orderId} from ${storeName} is out for delivery today.${trackingText}`,\n  delivered: `Hi ${firstName}, order #${orderId} from ${storeName} was delivered. Thank you for shopping with us.${storeText}`,\n  canceled: `Hi ${firstName}, order #${orderId} from ${storeName} was canceled. Contact support if this was unexpected.`,\n  failed: `Hi ${firstName}, payment for order #${orderId} at ${storeName} did not complete. Please check your order or contact support.`,\n  refunded: `Hi ${firstName}, refund processing has started for order #${orderId} from ${storeName}.`\n};\nconst errors = [];\n\nif (!orderId) errors.push('Missing order_id');\nif (!orderStatus) errors.push('Missing order_status');\nif (orderStatus && !supportedStatuses.includes(orderStatus)) errors.push(`Unsupported order status: ${orderStatus}`);\nif (!phone) errors.push('Missing customer phone');\nif (!consent) errors.push('Missing SMS consent');\nif (optedOut) errors.push('Customer opted out of SMS');\n\nconst shouldSend = errors.length === 0;\n\nreturn [{\n  json: {\n    shouldSend,\n    skipReason: errors.join('; '),\n    orderId,\n    orderStatus,\n    phone,\n    channel,\n    firstName,\n    storeName,\n    storeUrl,\n    orderDate,\n    orderTotal,\n    shippingMethod,\n    trackingNumber,\n    trackingUrl,\n    message: shouldSend ? withOptOut(messages[orderStatus]) : '',\n    referenceId: orderId && orderStatus ? `opencart-${orderId}-${orderStatus}` : '',\n  },\n}];"
+      },
+      "id": "8d368250-4132-439d-80ec-0297d235d87c",
+      "name": "Prepare OpenCart SMS notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        180,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.shouldSend}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "d3c567cb-f81a-4052-9683-16ac94cb9646",
+      "name": "Should send SMS?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        500,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "queueMessage",
+        "to": "={{$json.phone}}",
+        "message": "={{$json.message}}",
+        "channel": "={{$json.channel}}",
+        "scheduledAt": ""
+      },
+      "id": "125e7ff4-7ebc-4cc3-b50e-2adff59f3b83",
+      "name": "Queue OpenCart SMS with RCSZilla",
+      "type": "n8n-nodes-rcszilla.rcsZilla",
+      "typeVersion": 1,
+      "position": [
+        820,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, status: 'queued', orderId: $('Prepare OpenCart SMS notification').item.json.orderId, orderStatus: $('Prepare OpenCart SMS notification').item.json.orderStatus, referenceId: $('Prepare OpenCart SMS notification').item.json.referenceId, rcszilla: $json } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "286d7c28-815c-442c-9c22-544255bc12e0",
+      "name": "Respond queued",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1120,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, status: 'skipped', reason: $json.skipReason, orderId: $json.orderId, orderStatus: $json.orderStatus } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "d596fd43-4531-420e-8440-9b081420dd41",
+      "name": "Respond skipped",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        820,
+        300
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "OpenCart order webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare OpenCart SMS notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare OpenCart SMS notification": {
+      "main": [
+        [
+          {
+            "node": "Should send SMS?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should send SMS?": {
+      "main": [
+        [
+          {
+            "node": "Queue OpenCart SMS with RCSZilla",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Queue OpenCart SMS with RCSZilla": {
+      "main": [
+        [
+          {
+            "node": "Respond queued",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "f3cf8130-195b-4d4f-b95d-95b67c7203f9",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "opencart-sms-notifications-rcszilla",
+  "tags": []
+}
